@@ -91,7 +91,7 @@ class LocalAiManager(
         if (nearestNeighbors.isEmpty()) {
             primarySource = "General Knowledge"
             prompt = """
-                You are a helpful chatbot.
+                You are a helpful Neetprep chatbot.
                 
                 Question: $question
                 
@@ -108,7 +108,7 @@ class LocalAiManager(
             val safeContext = contextBuilder.toString().take(3000)
 
             prompt = """
-                You are a helpful science tutor. Answer the question based ONLY on the provided Context.
+                You are a helpful science tutor. Answer the question based on the provided Context and your reasoning.
                 
                 Context:
                 $safeContext

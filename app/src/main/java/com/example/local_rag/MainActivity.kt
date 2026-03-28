@@ -5,21 +5,27 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +78,8 @@ fun ChatScreen(aiManager: LocalAiManager) {
     
     var showDownloadScreen by remember { mutableStateOf(false) }
     var downloadStatusText by remember { mutableStateOf("") }
+    
+    var expandedMessage by remember { mutableStateOf<ChatMessage?>(null) }
     
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -180,89 +188,147 @@ fun ChatScreen(aiManager: LocalAiManager) {
         }
     )
 
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Local Science Tutor", fontWeight = FontWeight.Bold) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    actions = {
+                        IconButton(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
+                            Icon(Icons.Default.Add, contentDescription = "Upload PDF")
+                        }
+                    }
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(messages) { message ->
+                        MessageBubble(message = message, onClick = {
+                            if (!message.isUser) expandedMessage = message
+                        })
+                    }
+                    if (isTyping) {
+                        item {
+                            Text(
+                                text = "Tutor is thinking...",
+                                fontSize = 12.sp,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                }
+    
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Ask a science question...") },
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            if (inputText.isNotBlank() && !isTyping) {
+                                val userMsg = inputText
+                                messages = messages + ChatMessage(userMsg, true)
+                                inputText = ""
+                                isTyping = true
+                                
+                                coroutineScope.launch {
+                                    try {
+                                        val (answer, source) = aiManager.askScienceQuestion(userMsg)
+                                        messages = messages + ChatMessage(answer, false, source)
+                                    } catch (e: Exception) {
+                                        messages = messages + ChatMessage("Error generating answer: ${e.message}", false, "Error")
+                                    } finally {
+                                        isTyping = false
+                                    }
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Text("Send")
+                    }
+                }
+            }
+        }
+        
+        if (expandedMessage != null) {
+            ExpandedMessageView(
+                message = expandedMessage!!,
+                onBack = { expandedMessage = null }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExpandedMessageView(message: ChatMessage, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Local Science Tutor", fontWeight = FontWeight.Bold) },
+                title = { Text("AI Answer") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ),
-                actions = {
-                    IconButton(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
-                        Icon(Icons.Default.Add, contentDescription = "Upload PDF")
-                    }
-                }
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             )
-        },
-        modifier = Modifier.fillMaxSize()
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(messages) { message ->
-                    MessageBubble(message)
-                }
-                if (isTyping) {
-                    item {
-                        Text(
-                            text = "Tutor is thinking...",
-                            fontSize = 12.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Ask a science question...") },
-                    shape = RoundedCornerShape(24.dp)
+            Markdown(
+                content = message.text,
+                colors = markdownColor(text = MaterialTheme.colorScheme.onSurface)
+            )
+            
+            if (message.source != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Source: ${message.source}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        if (inputText.isNotBlank() && !isTyping) {
-                            val userMsg = inputText
-                            messages = messages + ChatMessage(userMsg, true)
-                            inputText = ""
-                            isTyping = true
-                            
-                            coroutineScope.launch {
-                                try {
-                                    val (answer, source) = aiManager.askScienceQuestion(userMsg)
-                                    messages = messages + ChatMessage(answer, false, source)
-                                } catch (e: Exception) {
-                                    messages = messages + ChatMessage("Error generating answer: ${e.message}", false, "Error")
-                                } finally {
-                                    isTyping = false
-                                }
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text("Send")
-                }
             }
         }
     }
@@ -275,7 +341,7 @@ data class ChatMessage(
 )
 
 @Composable
-fun MessageBubble(message: ChatMessage) {
+fun MessageBubble(message: ChatMessage, onClick: () -> Unit = {}) {
     val backgroundColor = if (message.isUser) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -296,6 +362,8 @@ fun MessageBubble(message: ChatMessage) {
         Column(
             modifier = Modifier
                 .background(backgroundColor, shape)
+                .clip(shape)
+                .clickable(enabled = !message.isUser, onClick = onClick)
                 .padding(12.dp)
                 .widthIn(max = 280.dp)
         ) {
