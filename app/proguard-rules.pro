@@ -19,3 +19,26 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# --- LOCAL RAG CHATBOT RULES ---
+
+# PDFBox warnings
+-dontwarn com.gemalto.jp2.JP2Decoder
+
+# Google MediaPipe/AutoValue warnings
+-dontwarn com.google.auto.value.AutoValue$Builder
+-dontwarn com.google.auto.value.AutoValue
+
+# Prevent R8 from stripping ObjectBox database generated files
+-keep class io.objectbox.** { *; }
+-dontwarn io.objectbox.**
+
+# Prevent R8 from breaking MediaPipe GenAI C++ hooks
+-keep class com.google.mediapipe.tasks.genai.** { *; }
+-dontwarn com.google.mediapipe.framework.image.**
+-keepclassmembers class * {
+    @com.google.mediapipe.framework.UsedByNative *;
+}
+
+# Prevent R8 from breaking ONNX Runtime C++ hooks
+-keep class ai.onnxruntime.** { *; }
